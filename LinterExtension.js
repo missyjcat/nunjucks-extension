@@ -1,3 +1,11 @@
+/**
+ * @fileOverview This file has the nunjucks {% lint %} implementation for applying
+ * ESLint-style rules to Nunjucks template.
+ *
+ * @author jchan
+ * @version 0.1
+ */
+
 var path = require('path');
 var fs = require('fs');
 
@@ -10,6 +18,9 @@ var LinterExtension = function(rulesDirectory) {
     this.tags = ['lint'];
     this.app = null;
     this._rules = {};
+    this.context = {
+        comments: []
+    };
 
     var ALLOWED_TARGETS = ['Node', 'Root', 'NodeList', 'Value', 'Literal', 'Symbol',
         'Group', 'Array', 'Pair', 'Dict', 'Output', 'TemplateData', 'If', 'IfAsync',
@@ -18,17 +29,6 @@ var LinterExtension = function(rulesDirectory) {
         'Super', 'Extends', 'Include', 'Set', 'LookupVal', 'BinOp', 'In', 'Or',
         'And', 'Not', 'Add', 'Sub', 'Mul', 'Div', 'FloorDiv', 'Mod', 'Pow', 'Neg',
         'Pos', 'Compare', 'CompareOperand', 'CallExtension', 'CallExtensionAsync'];
-
-    // Add target keys to rules map
-    for (var i = 0; i < ALLOWED_TARGETS.length; i++) {
-        this._rules[ALLOWED_TARGETS[i]] = [];
-        this._rules[ALLOWED_TARGETS[i] + ":exit"] = [];
-    }
-
-    // Store the directory listing
-    var rulesPath = path.resolve(rulesDirectory);
-    var rulesFiles = fs.readdirSync(rulesPath);
-    // console.log(rulesPath, rulesFiles);
 
     /**
      * Returns new value without ":exit" if present from a key
@@ -46,13 +46,59 @@ var LinterExtension = function(rulesDirectory) {
     /**
      * Returns new string value with ":exit" if not already present
      * @param {String} target
+     * @return {String} 
      */
     var addExit = function(target) {
         if (target.indexOf(':exit') === -1) {
             return target + ':exit';
         }
         return target;
+    };
+
+    /**
+     * Given a node return its type
+     * @param  {Object} Nunjucks node object 
+     * @param  {Node} node  
+     * @return {String}
+     */
+    var getNodeTypes = function(nodes, node) {
+        if (!node) {
+            return;
+        }
+        var nodeTypes = Object.keys(nodes);
+        var types = [];
+        for (i = 0; i < nodeTypes.length; i++) {
+            if (node instanceof nodes[nodeTypes[i]]) {
+                types.push(nodeTypes[i]);
+            }
+        }
+        return types;
+    };
+
+    /**
+     * Execute functions for a given NodeType given an array of rules
+     * @param  {Array} rules
+     * @param  {Object} node
+     * @return
+     */
+    var executeRulesOnNode = function(rules, node) {
+        if (rules && rules.length) {
+            for (i = 0; i < rules.length; i++) {
+                rules[i](node);
+            }
+        }
+        return;
+    };
+
+    // Add target keys to rules map
+    for (var i = 0; i < ALLOWED_TARGETS.length; i++) {
+        this._rules[ALLOWED_TARGETS[i]] = [];
+        this._rules[ALLOWED_TARGETS[i] + ":exit"] = [];
     }
+
+    // Get an array of the rule filenames we're working with
+    var rulesPath = path.resolve(rulesDirectory);
+    var rulesFiles = fs.readdirSync(rulesPath);
 
     // Loop through each file 
     var tempMap;
@@ -76,47 +122,17 @@ var LinterExtension = function(rulesDirectory) {
     }
 
     /**
-     * Execute functions for a given NodeType given an array of rules
-     * @param  {Array} rules
-     * @param  {Object} node
-     * @return
+     * Set the app name to include in context information
+     * @param {String} app 
      */
-    this._executeRulesOnNode = function(rules, node) {
-        if (rules && rules.length) {
-            for (i = 0; i < rules.length; i++) {
-                console.log('running a rule on ' + node);
-                rules[i](node);
-            }
-        }
-        return;
-    };
-
-    // Set the app to include in the context
     this.setApp = function(app) {
         this.app = app;
-    };
-
-    this._getNodeTypes = function(nodes, node) {
-        if (!node) {
-            return;
-        }
-        var nodeTypes = Object.keys(nodes);
-        // Need to get rid of printNodes
-        nodeTypes.splice(nodeTypes.indexOf('printNodes'), 1);
-        // console.log(nodeTypes);
-        var types = [];
-        for (i = 0; i < nodeTypes.length; i++) {
-            if (node instanceof nodes[nodeTypes[i]]) {
-                types.push(nodeTypes[i]);
-            }
-        }
-        return types;
     };
 
     /**
      * In-order traversal of the template's AST from the root, applying rules as
      * we enter and exit the functions
-     * @param  {Object} nodes
+     * @param  {Object} nodes   Nunjucks nodes object
      * @param  {Object} nodeTreeRoot
      */
     this._traverseTreeAndExecRules = function(nodes, nodeTreeRoot) {
@@ -124,16 +140,16 @@ var LinterExtension = function(rulesDirectory) {
         var current = null;
         var state = [];
         // entering a node
-        console.log('entering: ', this._getNodeTypes(nodes, root));
+        console.log('entering: ', getNodeTypes(nodes, root));
         console.log(root);
-        var types = this._getNodeTypes(nodes, root);
+        var types = getNodeTypes(nodes, root);
         var ruleKeys = Object.keys(this._rules);
         // Get the types of this node and loop through our rules.
         for (i = 0; i < types.length; i++) {
             // console.log('Types are: ' + types[i]);
             if (this._rules[types[i]].length) {
                 console.log('executing... ' + types[i]);
-                this._executeRulesOnNode(this._rules[types[i]], root);
+                executeRulesOnNode(this._rules[types[i]], root);
             }
         }
         // this._rules['Set'][0](root.children[0]);
@@ -143,13 +159,13 @@ var LinterExtension = function(rulesDirectory) {
             for (var j = 0; j < root.children.length; j++) {
                 this._traverseTreeAndExecRules(nodes, root.children[j]);
             }
-            console.log('exiting a parent node: ', this._getNodeTypes(nodes, root));
+            console.log('exiting a parent node: ', getNodeTypes(nodes, root));
         } else {
             // exiting a childless node
-            console.log('exiting a childless node: ', this._getNodeTypes(nodes, root));
+            console.log('exiting a childless node: ', getNodeTypes(nodes, root));
             for (var k = 0; k < types.length; k++) {
                 if (this._rules[types[k] + ':exit'].length) {
-                    this._executeRulesOnNode(this._rules[types[k] + ':exit'], root);
+                    executeRulesOnNode(this._rules[types[k] + ':exit'], root);
                 }
             }
         }
@@ -167,21 +183,52 @@ var LinterExtension = function(rulesDirectory) {
     this.parse = function(parser, nodes, lexer) {
 
         // Skip the beginning {% lint %} tag
-        parser.nextToken();
+        console.log(parser.nextToken());
         parser.skip(lexer.TOKEN_BLOCK_END);
 
         // Might want to manually parse token by token to build up a tree that has
         // manually inserted information for comments
+        console.log(lexer);
+
+        var storedComment = [];
+
+        do {
+            if (parser.peekToken()) {
+                var curr = parser.peekToken();
+                switch(curr.type) {
+                
+                case 'comment':
+                    // A comment just happened. Cache it so that the next node we
+                    // encounter picks it up as its leading comment.
+                    storedComment.push(curr);
+
+                    // Add this comment to our context so that we can get all comments
+                    // in this source also.
+                    this.context.comments.push(curr);
+
+                    break;
+                
+                }
+                
+                console.log('token: ', curr);
+                parser.parseSignature(null, false);
+                // var node = parser.parse();
+                // console.log('node: ', node);
+            }
+        }
+        while(parser.nextToken())
 
         // Gets the root of the tree with references to children
         var root = parser.parseUntilBlocks('endlint');
-        // console.log(this._getNodeTypes(root), root);
-        // console.log(root.children[0].children[0]);
-        // console.log(this._getNodeTypes(nodes, root.children[0].children[0]));
 
         // Traverse the tree
-        this._traverseTreeAndExecRules(nodes, root);
-        
+        // this._traverseTreeAndExecRules(nodes, root);
+
+        // Skip the ending {% endlint %} tag
+        // parser.nextToken();
+        // parser.skip(lexer.TOKEN_BLOCK_END);
+
+        // return root;
 
     };
 
