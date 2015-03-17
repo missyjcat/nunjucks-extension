@@ -1,5 +1,8 @@
+{#
+    This is a comment tho
+#}
 {% set hey = "Hello" %}
-
-{{ hey }}, Jessss.
+{% set name = name or "Jessica" %}
+{{ hey }}, {{ name|lower }}.
 
 hi hi hi

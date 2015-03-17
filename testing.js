@@ -3,15 +3,16 @@ var fs = require('fs');
 var path = require('path');
 var LinterLoader = require('./LinterLoader').LinterLoader;
 var LinterExtension = require('./LinterExtension').LinterExtension;
+var InspectExtension = require('./InspectExtension').InspectExtension;
 
 var dir = __dirname + '/templates/';
 var stat = fs.statSync(__dirname + '/templates/');
 var files = fs.readdirSync(dir);
-console.log(files);
+// console.log(files);
 var filepath = path.join(dir, files[0]);
 var subpath = filepath.substr(path.join(dir, '/').length);
-console.log('subapth: ',subpath);
-console.log(fs.statSync(filepath).isDirectory());
+// console.log('subapth: ',subpath);
+// console.log(fs.statSync(filepath).isDirectory());
 
 // var walk = function(dir, done) {
 //   var results = [];
@@ -52,13 +53,16 @@ console.log(fs.statSync(filepath).isDirectory());
 // //     env: env    
 // // });
 
+// var env = new nunjucks.Environment([new nunjucks.FileSystemLoader('templates')]);
 var env = new nunjucks.Environment([new LinterLoader('templates')]);
-env.addExtension('LinterExtension', new LinterExtension());
-var hi = env.getTemplate('testing.html');
-console.log(hi.render());
-
-// var hi = nunjucks.precompile(__dirname + '/templates/', { env: env, include: ['testing.html'] });
+env.addExtension('LinterExtension', new LinterExtension('rules'));
+env.addExtension('InspectExtension', new InspectExtension());
+var hi = env.getTemplate('testing.html', true);
 // console.log(hi);
+console.log(hi.render({ name: "Kris"}));
+
+// var hey = nunjucks.precompile(__dirname + '/templates/', { env: env, include: ['testing.html'] });
+// console.log(hey);
 
 // var hi = nunjucks.compile('hey', env);
 // console.log(hi.render());
