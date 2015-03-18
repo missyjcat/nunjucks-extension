@@ -59,7 +59,7 @@ var LinterExtension = function(rulesDirectory) {
      * Given a node return its type
      * @param  {Object} Nunjucks node object 
      * @param  {Node} node  
-     * @return {String}
+     * @return {Array}
      */
     var getNodeTypes = function(nodes, node) {
         if (!node) {
@@ -74,6 +74,18 @@ var LinterExtension = function(rulesDirectory) {
         }
         return types;
     };
+
+    /**
+     * Given a node return its constructor
+     * @param  {Node} node  
+     * @return {Object}
+     */
+    var getNodeConstructor = function(node) {
+        if (!node) {
+            return;
+        }
+        return node.constructor.prototype;
+    }
 
     /**
      * Execute functions for a given NodeType given an array of rules
@@ -182,53 +194,148 @@ var LinterExtension = function(rulesDirectory) {
     */
     this.parse = function(parser, nodes, lexer) {
 
+
         // Skip the beginning {% lint %} tag
         console.log(parser.nextToken());
-        parser.skip(lexer.TOKEN_BLOCK_END);
+        parser.nextToken();
 
         // Might want to manually parse token by token to build up a tree that has
         // manually inserted information for comments
-        console.log(lexer);
+        var Tokenizer = parser.tokens.constructor;
+        Tokenizer.prototype = parser.tokens.constructor.prototype;
+
+        // Construct the current Tokenizer instance's opts
+        var opts = {
+            tags: parser.tokens.tags,
+            trimBlocks: parser.tokens.trimBlocks,
+            lstripBlocks: parser.tokens.lstripBlocks
+        };
+
+        var jessTokens = new Tokenizer(parser.tokens.str, opts);
+        console.log('jess', jessTokens);
+
+        var Parser = parser.constructor;
+
+        Parser.prototype = parser.constructor.prototype;
+        var jessParser = new Parser(jessTokens);
+        console.log(jessParser);
+
+        // console.log('jess: ', jessParser.peekToken());
+        console.log('parser: ', parser.peekToken());
+        console.log(jessParser.nextToken());
+        console.log(jessParser.nextToken());
+        console.log(jessParser.nextToken());
+        console.log(jessParser.nextToken());
+        console.log(jessParser.nextToken());
+        // var root = jessParser.parseUntilBlocks('endlint');
+        // console.log('root', root);
+
+        // console.log('jess: ', jessParser.peekToken());
+        console.log('parser: ', parser.peekToken());
 
         var storedComment = [];
-
-        do {
-            if (parser.peekToken()) {
-                var curr = parser.peekToken();
-                switch(curr.type) {
+        // do {
+        //     if (parser.peekToken()) {
+        //         var curr = parser.peekToken();
+        //         switch(curr.type) {
                 
-                case 'comment':
-                    // A comment just happened. Cache it so that the next node we
-                    // encounter picks it up as its leading comment.
-                    storedComment.push(curr);
+        //         case 'comment':
+        //             // A comment just happened. Cache it so that the next node we
+        //             // encounter picks it up as its leading comment.
+        //             storedComment.push(curr);
 
-                    // Add this comment to our context so that we can get all comments
-                    // in this source also.
-                    this.context.comments.push(curr);
+        //             // Add this comment to our context so that we can get all comments
+        //             // in this source also.
+        //             this.context.comments.push(curr);
 
-                    break;
+        //             break;
                 
-                }
+        //         // parser.parseSignature(null, false);
                 
-                console.log('token: ', curr);
-                parser.parseSignature(null, false);
-                // var node = parser.parse();
-                // console.log('node: ', node);
-            }
-        }
-        while(parser.nextToken())
+        //         // var node = parser.parse();
+        //         // console.log('node: ', node);
+        //         }
+        //         console.log('token: ', curr);
+        //     }
 
-        // Gets the root of the tree with references to children
-        var root = parser.parseUntilBlocks('endlint');
+        // }
+        // while(parser.nextToken())
 
+        // var thisOne;
+        // console.log('starign loop');
+        // console.log(parser.tokens.current());
+        // while(parser.tokens.current()) {
+        //     console.log(parser.tokens.current());
+        //     parser.tokens.back();
+        // parser.parseNodes = function () {
+        //     var tok;
+        //     var buf = [];
+
+        //     while((tok = this.nextToken())) {
+        //         if(tok.type === lexer.TOKEN_DATA) {
+        //             var data = tok.value;
+        //             var nextToken = this.peekToken();
+        //             var nextVal = nextToken && nextToken.value;
+
+        //             // If the last token has "-" we need to trim the
+        //             // leading whitespace of the data. This is marked with
+        //             // the `dropLeadingWhitespace` variable.
+        //             if(this.dropLeadingWhitespace) {
+        //                 // TODO: this could be optimized (don't use regex)
+        //                 data = data.replace(/^\s*/, '');
+        //                 this.dropLeadingWhitespace = false;
+        //             }
+
+        //             // Same for the succeding block start token
+        //             if(nextToken &&
+        //                nextToken.type === lexer.TOKEN_BLOCK_START &&
+        //                nextVal.charAt(nextVal.length - 1) === '-') {
+        //                 // TODO: this could be optimized (don't use regex)
+        //                 data = data.replace(/\s*$/, '');
+        //             }
+
+        //             buf.push(new nodes.Output(tok.lineno,
+        //                                       tok.colno,
+        //                                       [new nodes.TemplateData(tok.lineno,
+        //                                                               tok.colno,
+        //                                                               data)]));
+        //         }
+        //         else if(tok.type === lexer.TOKEN_BLOCK_START) {
+        //             var n = this.parseStatement();
+        //             if(!n) {
+        //                 break;
+        //             }
+        //             buf.push(n);
+        //         }
+        //         else if(tok.type === lexer.TOKEN_VARIABLE_START) {
+        //             var e = this.parseExpression();
+        //             this.advanceAfterVariableEnd();
+        //             buf.push(new nodes.Output(tok.lineno, tok.colno, [e]));
+        //         }
+        //         else if(tok.type !== lexer.TOKEN_COMMENT) {
+        //             // Ignore comments, otherwise this should be an error
+        //             this.fail('Unexpected token at top-level: ' +
+        //                             tok.type, tok.lineno, tok.colno);
+        //         }
+        //     }
+
+        //     return buf;
+        // };
+        // var root = parser.parseUntilBlocks('endlint');
+        // }
+        // console.log('after the loop ', parser.peekToken());
+
+        // // Gets the root of the tree with references to children('endlint');
+        // console.log(root);
+        // console.log('NODE: ', nodes.printNodes(root));
         // Traverse the tree
         // this._traverseTreeAndExecRules(nodes, root);
 
         // Skip the ending {% endlint %} tag
         // parser.nextToken();
-        // parser.skip(lexer.TOKEN_BLOCK_END);
+        // parser.nextToken();
 
-        // return root;
+        // return node;
 
     };
 
