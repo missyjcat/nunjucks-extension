@@ -19,7 +19,28 @@ var LinterExtension = function(rulesDirectory) {
     this.app = null;
     this._rules = {};
     this.context = {
-        comments: []
+        _comments: [],
+        _sourceCode: {},
+
+        getAllComments: function() {
+
+        },
+
+        getSource: function(node) {
+            var out = '';
+            for (key in this._sourceCode) {
+                out += this._sourceCode[key].join(' ') + '\n';
+            }
+            return out;
+        }, 
+
+        getSurroundingSource: function(node, lines) {
+
+        },
+
+        getLineNumber: function(node) {
+            return node.lineno + 1;
+        }
     };
 
     var ALLOWED_TARGETS = ['Node', 'Root', 'NodeList', 'Value', 'Literal', 'Symbol',
@@ -117,7 +138,7 @@ var LinterExtension = function(rulesDirectory) {
     for (i = 0; i < rulesFiles.length; i++) {
 
         // Store returned dict of rules in a temporary map
-        tempMap = require(rulesPath + '/' + rulesFiles[i])();
+        tempMap = require(rulesPath + '/' + rulesFiles[i])(this.context);
 
         // For each rule, verify it's an allowed target and store it in our rules
         for (key in tempMap) {
@@ -172,6 +193,11 @@ var LinterExtension = function(rulesDirectory) {
                 this._traverseTreeAndExecRules(nodes, root.children[j]);
             }
             console.log('exiting a parent node: ', getNodeTypes(nodes, root));
+            for (var k = 0; k < types.length; k++) {
+                if (this._rules[types[k] + ':exit'].length) {
+                    executeRulesOnNode(this._rules[types[k] + ':exit'], root);
+                }
+            }
         } else {
             // exiting a childless node
             console.log('exiting a childless node: ', getNodeTypes(nodes, root));
@@ -215,9 +241,28 @@ var LinterExtension = function(rulesDirectory) {
 
         var storedComments = [];
         var sourceCode = {};
+
+        var addToSourceDict = function(tok) {
+            // Adding one because tokens seem to be zero-indexed
+            var lineNo = curr.lineno + 1;
+            if (sourceCode[lineNo]) {
+                sourceCode[lineNo].push(curr.value)
+            } else {
+                sourceCode[lineNo] = [curr.value];
+            }
+        };
+
+        // Skip the beginning {% lint %} tag
+        altParser.nextToken();
+        altParser.nextToken();
+        altParser.nextToken();
+        var curr = altParser.nextToken();
+        var done = false;
         do {
-            if (altParser.peekToken()) {
-                var curr = altParser.peekToken();
+            if (altParser.peekToken() && !done) {
+                var peek = altParser.peekToken();
+                console.log('curr: ', curr);
+                console.log('peek: ', peek);
                 switch(curr.type) {
                 
                 case 'comment':
@@ -227,25 +272,28 @@ var LinterExtension = function(rulesDirectory) {
 
                     // Store this in our source code dict
                     console.log('comment: ', curr);
+                    addToSourceDict(curr);
+                    break;
+                case 'block-start':
+                    // Skipping the endlint tag so it doesn't show up in our souce
+                    if (peek.value === 'endlint') {
+                        done = true;
+                    }
                     break;
                 default:
                     console.log(curr);
-
+                    addToSourceDict(curr)
                     break;
-                }
-
-                // Adding one because tokens seem to be zero-indexed
-                var lineNo = curr.lineno + 1;
-                if (sourceCode[lineNo]) {
-                    sourceCode[lineNo].push(curr.value)
-                } else {
-                    sourceCode[lineNo] = [curr.value];
                 }
             }
 
         }
-        while(altParser.nextToken())
-        console.log('source: ', sourceCode);
+        while(curr = altParser.nextToken())
+
+        this.context._comments.concat(storedComments);
+        this.context._sourceCode = sourceCode;
+
+        console.log('source: ', this.context._sourceCode);
         console.log('allComments: ', storedComments);
 
         // Starting the actual parsing and linting
