@@ -194,16 +194,14 @@ var LinterExtension = function(rulesDirectory) {
     */
     this.parse = function(parser, nodes, lexer) {
 
-
-        // Skip the beginning {% lint %} tag
-        console.log(parser.nextToken());
-        parser.nextToken();
-
-        // Might want to manually parse token by token to build up a tree that has
-        // manually inserted information for comments
+        // The parser that is passed to this function already has a Tokenizer
+        // instance doing it's thing. But we want to create an independent
+        // parser with its own Tokenizer instance to do some source code indexing
         var Tokenizer = parser.tokens.constructor;
         Tokenizer.prototype = parser.tokens.constructor.prototype;
-
+        var Parser = parser.constructor;
+        Parser.prototype = parser.constructor.prototype;
+        
         // Construct the current Tokenizer instance's opts
         var opts = {
             tags: parser.tokens.tags,
@@ -211,131 +209,60 @@ var LinterExtension = function(rulesDirectory) {
             lstripBlocks: parser.tokens.lstripBlocks
         };
 
-        var jessTokens = new Tokenizer(parser.tokens.str, opts);
-        console.log('jess', jessTokens);
+        var altTokens = new Tokenizer(parser.tokens.str, opts);
 
-        var Parser = parser.constructor;
+        var altParser = new Parser(altTokens);
 
-        Parser.prototype = parser.constructor.prototype;
-        var jessParser = new Parser(jessTokens);
-        console.log(jessParser);
-
-        // console.log('jess: ', jessParser.peekToken());
-        console.log('parser: ', parser.peekToken());
-        console.log(jessParser.nextToken());
-        console.log(jessParser.nextToken());
-        console.log(jessParser.nextToken());
-        console.log(jessParser.nextToken());
-        console.log(jessParser.nextToken());
-        // var root = jessParser.parseUntilBlocks('endlint');
-        // console.log('root', root);
-
-        // console.log('jess: ', jessParser.peekToken());
-        console.log('parser: ', parser.peekToken());
-
-        var storedComment = [];
-        // do {
-        //     if (parser.peekToken()) {
-        //         var curr = parser.peekToken();
-        //         switch(curr.type) {
+        var storedComments = [];
+        var sourceCode = {};
+        do {
+            if (altParser.peekToken()) {
+                var curr = altParser.peekToken();
+                switch(curr.type) {
                 
-        //         case 'comment':
-        //             // A comment just happened. Cache it so that the next node we
-        //             // encounter picks it up as its leading comment.
-        //             storedComment.push(curr);
+                case 'comment':
+                    // A comment just happened. Store them in an array so that context
+                    // can access them.
+                    storedComments.push(curr);
 
-        //             // Add this comment to our context so that we can get all comments
-        //             // in this source also.
-        //             this.context.comments.push(curr);
+                    // Store this in our source code dict
+                    console.log('comment: ', curr);
+                    break;
+                default:
+                    console.log(curr);
 
-        //             break;
-                
-        //         // parser.parseSignature(null, false);
-                
-        //         // var node = parser.parse();
-        //         // console.log('node: ', node);
-        //         }
-        //         console.log('token: ', curr);
-        //     }
+                    break;
+                }
 
-        // }
-        // while(parser.nextToken())
+                // Adding one because tokens seem to be zero-indexed
+                var lineNo = curr.lineno + 1;
+                if (sourceCode[lineNo]) {
+                    sourceCode[lineNo].push(curr.value)
+                } else {
+                    sourceCode[lineNo] = [curr.value];
+                }
+            }
 
-        // var thisOne;
-        // console.log('starign loop');
-        // console.log(parser.tokens.current());
-        // while(parser.tokens.current()) {
-        //     console.log(parser.tokens.current());
-        //     parser.tokens.back();
-        // parser.parseNodes = function () {
-        //     var tok;
-        //     var buf = [];
+        }
+        while(altParser.nextToken())
+        console.log('source: ', sourceCode);
+        console.log('allComments: ', storedComments);
 
-        //     while((tok = this.nextToken())) {
-        //         if(tok.type === lexer.TOKEN_DATA) {
-        //             var data = tok.value;
-        //             var nextToken = this.peekToken();
-        //             var nextVal = nextToken && nextToken.value;
+        // Starting the actual parsing and linting
 
-        //             // If the last token has "-" we need to trim the
-        //             // leading whitespace of the data. This is marked with
-        //             // the `dropLeadingWhitespace` variable.
-        //             if(this.dropLeadingWhitespace) {
-        //                 // TODO: this could be optimized (don't use regex)
-        //                 data = data.replace(/^\s*/, '');
-        //                 this.dropLeadingWhitespace = false;
-        //             }
+        // Skip the beginning {% lint %} tag
+        parser.nextToken();
+        parser.nextToken();
+        var root = parser.parseUntilBlocks('endlint');
 
-        //             // Same for the succeding block start token
-        //             if(nextToken &&
-        //                nextToken.type === lexer.TOKEN_BLOCK_START &&
-        //                nextVal.charAt(nextVal.length - 1) === '-') {
-        //                 // TODO: this could be optimized (don't use regex)
-        //                 data = data.replace(/\s*$/, '');
-        //             }
-
-        //             buf.push(new nodes.Output(tok.lineno,
-        //                                       tok.colno,
-        //                                       [new nodes.TemplateData(tok.lineno,
-        //                                                               tok.colno,
-        //                                                               data)]));
-        //         }
-        //         else if(tok.type === lexer.TOKEN_BLOCK_START) {
-        //             var n = this.parseStatement();
-        //             if(!n) {
-        //                 break;
-        //             }
-        //             buf.push(n);
-        //         }
-        //         else if(tok.type === lexer.TOKEN_VARIABLE_START) {
-        //             var e = this.parseExpression();
-        //             this.advanceAfterVariableEnd();
-        //             buf.push(new nodes.Output(tok.lineno, tok.colno, [e]));
-        //         }
-        //         else if(tok.type !== lexer.TOKEN_COMMENT) {
-        //             // Ignore comments, otherwise this should be an error
-        //             this.fail('Unexpected token at top-level: ' +
-        //                             tok.type, tok.lineno, tok.colno);
-        //         }
-        //     }
-
-        //     return buf;
-        // };
-        // var root = parser.parseUntilBlocks('endlint');
-        // }
-        // console.log('after the loop ', parser.peekToken());
-
-        // // Gets the root of the tree with references to children('endlint');
-        // console.log(root);
-        // console.log('NODE: ', nodes.printNodes(root));
         // Traverse the tree
-        // this._traverseTreeAndExecRules(nodes, root);
+        this._traverseTreeAndExecRules(nodes, root);
 
         // Skip the ending {% endlint %} tag
-        // parser.nextToken();
-        // parser.nextToken();
+        parser.nextToken();
+        parser.nextToken();
 
-        // return node;
+        return root;
 
     };
 
