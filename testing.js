@@ -57,9 +57,10 @@ var subpath = filepath.substr(path.join(dir, '/').length);
 var env = new nunjucks.Environment([new LinterLoader('templates')]);
 env.addExtension('LinterExtension', new LinterExtension('rules'));
 env.addExtension('InspectExtension', new InspectExtension());
-var hi = env.getTemplate('testing.html', true);
+var template = env.getTemplate('testing.html', true);
+console.log('path: ', template.path);
 // console.log(hi);
-console.log(hi.render({ name: "Kris"}));
+console.log(template.render({ name: "Kris"}));
 
 // var hey = nunjucks.precompile(__dirname + '/templates/', { env: env, include: ['testing.html'] });
 // console.log(hey);
